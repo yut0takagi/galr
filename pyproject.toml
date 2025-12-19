@@ -9,7 +9,6 @@ description = "Gated Asymmetric Linear Regression - 特徴量に応じてコス�
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
-license-files = ["LICENSE"]
 authors = [
     {name = "Yuto TAKAGI", email = "yutotakagi.for.business@gmail.com"}
 ]
