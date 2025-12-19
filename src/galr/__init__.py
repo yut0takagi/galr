@@ -8,4 +8,3 @@ from .galr import GALRRegressor
 
 __version__ = "0.1.0"
 __all__ = ["GALRRegressor"]
-
