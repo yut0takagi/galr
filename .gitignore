@@ -58,3 +58,6 @@ build/
 .dmypy.json
 dmypy.json
 
+# Scripts (実行可能ファイルは除外しない)
+# scripts/
+
