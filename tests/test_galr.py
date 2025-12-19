@@ -84,9 +84,7 @@ class TestGALRRegressor:
         X, y = make_regression(n_samples=50, n_features=3, noise=0.1, random_state=42)
 
         # Test with stronger regularization
-        model_strong = GALRRegressor(
-            lambda_beta=1.0, lambda_gate=1.0, n_iter=100, random_state=42
-        )
+        model_strong = GALRRegressor(lambda_beta=1.0, lambda_gate=1.0, n_iter=100, random_state=42)
         model_strong.fit(X, y)
 
         # Test with weak regularization
