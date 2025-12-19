@@ -159,6 +159,15 @@ jobs:
         run: |
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
           BRANCH="release/v$NEW_VERSION"
+          
+          # 既存のリリースブランチを削除（存在する場合）
+          git fetch origin
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Release branch $BRANCH already exists, deleting it..."
+            git push origin --delete "$BRANCH" || true
+          fi
+          
+          # 新しいリリースブランチを作成
           git checkout -b "$BRANCH"
           echo "Created release branch: $BRANCH"
 
@@ -209,12 +218,24 @@ jobs:
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
           BRANCH="release/v$NEW_VERSION"
           
+          # タグを作成（既存の場合は削除して再作成）
+          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag v$NEW_VERSION already exists locally, deleting..."
+            git tag -d "v$NEW_VERSION" || true
+          fi
+          
+          # リモートタグも削除（存在する場合）
+          if git ls-remote --tags origin "v$NEW_VERSION" | grep -q "v$NEW_VERSION"; then
+            echo "Tag v$NEW_VERSION already exists remotely, deleting..."
+            git push origin --delete "v$NEW_VERSION" || true
+          fi
+          
           # タグを作成
           git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
           
           # リリースブランチとタグをプッシュ
-          git push origin "$BRANCH"
-          git push origin "v$NEW_VERSION"
+          git push origin "$BRANCH" --force
+          git push origin "v$NEW_VERSION" --force
           
           echo "Pushed release branch and tag"
 
