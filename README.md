@@ -110,7 +110,18 @@ MIT License
 
 ## CI/CD
 
-このプロジェクトは**GitHub Actionsによる完全自動リリース**を採用しています。
+このプロジェクトは**GitHub ActionsによるCI/CD**を採用しています。
+
+### 継続的インテグレーション (CI)
+
+**Pull Request作成時に自動実行**:
+- **テスト**: 複数のPythonバージョン（3.8-3.13）でテストを実行
+- **リント**: flake8によるコード品質チェック
+- **型チェック**: mypyによる型チェック
+- **ビルド**: パッケージのビルドと検証
+- **バージョンチェック**: バージョン形式の検証
+
+### 継続的デプロイ (CD)
 
 - **developブランチからmainへのマージ**: 自動的にバージョンをインクリメントしてPyPIに公開（推奨）
 - **mainブランチへの直接プッシュ**: 自動的にバージョンをインクリメントしてPyPIに公開
@@ -171,10 +182,29 @@ pip install -e ".[dev]"
 ### テスト
 
 ```bash
-# テストの実行（pytestが必要）
+# テストの実行
 pytest
 
 # カバレッジ付きテスト
 pytest --cov=galr --cov-report=html
+
+# 特定のテストのみ実行
+pytest tests/test_galr.py::TestGALRRegressor::test_fit_predict
+```
+
+### コード品質チェック
+
+```bash
+# リントチェック
+flake8 src/ tests/
+
+# コードフォーマットチェック
+black --check src/ tests/
+
+# コードフォーマット適用
+black src/ tests/
+
+# 型チェック
+mypy src/galr
 ```
 
