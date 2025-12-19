@@ -8,8 +8,7 @@ version = "0.1.0"
 description = "Gated Asymmetric Linear Regression - 特徴量に応じてコスト比を学習する回帰モデル"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
-license-files = ["LICENSE"]
+license = {text = "MIT"}
 authors = [
     {name = "Yuto TAKAGI", email = "yutotakagi.for.business@gmail.com"}
 ]
@@ -46,6 +45,7 @@ dev = [
     "black>=23.0.0",
     "flake8>=6.0.0",
     "mypy>=1.0.0",
+    "types-requests",
 ]
 
 [tool.setuptools]
@@ -62,4 +62,39 @@ target-version = ['py38']
 python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = [
+    "sklearn.*",
+    "numpy.*",
+]
+ignore_missing_imports = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

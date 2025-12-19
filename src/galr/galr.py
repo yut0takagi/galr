@@ -157,9 +157,7 @@ class GALRRegressor(BaseEstimator, RegressorMixin):
 
         # 正則化項
         reg_beta = self.lambda_beta * np.sum(self.beta_**2)
-        reg_gate = self.lambda_gate * (
-            np.sum(self.theta_**2) + self.gate_intercept_**2
-        )
+        reg_gate = self.lambda_gate * (np.sum(self.theta_**2) + self.gate_intercept_**2)
 
         total_loss = data_loss + reg_beta + reg_gate
 
@@ -217,9 +215,7 @@ class GALRRegressor(BaseEstimator, RegressorMixin):
         # interceptの勾配（fit_intercept=Trueの場合）
         if self.fit_intercept:
             grad_intercept = (
-                -2.0
-                / n_samples
-                * np.sum((mask_under * w_under + mask_over * w_over) * residuals)
+                -2.0 / n_samples * np.sum((mask_under * w_under + mask_over * w_over) * residuals)
             )
         else:
             grad_intercept = None
@@ -243,9 +239,7 @@ class GALRRegressor(BaseEstimator, RegressorMixin):
         grad_gate_intercept = (
             1.0
             / n_samples
-            * np.sum(
-                (mask_under * sig_gate - mask_over * sig_neg_gate) * residuals**2
-            )
+            * np.sum((mask_under * sig_gate - mask_over * sig_neg_gate) * residuals**2)
             + 2 * self.lambda_gate * self.gate_intercept_
         )
 
@@ -297,8 +291,8 @@ class GALRRegressor(BaseEstimator, RegressorMixin):
             prev_loss = loss
 
             # 勾配の計算
-            grad_beta, grad_intercept, grad_theta, grad_gate_intercept = (
-                self._compute_gradients(X, y)
+            grad_beta, grad_intercept, grad_theta, grad_gate_intercept = self._compute_gradients(
+                X, y
             )
 
             # パラメータの更新
@@ -391,4 +385,3 @@ class GALRRegressor(BaseEstimator, RegressorMixin):
 
         w_under, w_over, _ = self._compute_weights(X)
         return w_under, w_over
-

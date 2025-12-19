@@ -1,0 +1,285 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0). Leave empty for auto-increment.'
+        required: false
+        type: string
+      version_type:
+        description: 'Auto-increment type (if version not specified)'
+        required: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # ブランチ、タグ、リリースの作成に必要
+      id-token: write  # PyPIへの公開に必要
+
+    steps:
+      - name: Check if PR was merged
+        id: check_pr
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ github.event.pull_request.merged }}" == "true" ]; then
+            echo "merged=true" >> $GITHUB_OUTPUT
+            echo "PR was merged, proceeding with release"
+          else
+            echo "merged=false" >> $GITHUB_OUTPUT
+            echo "PR was not merged, skipping release"
+          fi
+
+      - name: Checkout code
+        if: |
+          github.event_name == 'push' || 
+          (github.event_name == 'pull_request' && steps.check_pr.outputs.merged == 'true') ||
+          github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        if: |
+          github.event_name == 'push' || 
+          (github.event_name == 'pull_request' && steps.check_pr.outputs.merged == 'true') ||
+          github.event_name == 'workflow_dispatch'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Configure Git
+        if: |
+          github.event_name == 'push' || 
+          (github.event_name == 'pull_request' && steps.check_pr.outputs.merged == 'true') ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Get current version
+        if: |
+          github.event_name == 'push' || 
+          (github.event_name == 'pull_request' && steps.check_pr.outputs.merged == 'true') ||
+          github.event_name == 'workflow_dispatch'
+        id: current_version
+        run: |
+          VERSION=$(grep -E '^version = ' pyproject.toml | sed -E "s/^version = ['\"](.+)['\"]/\1/")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Calculate new version
+        if: |
+          github.event_name == 'push' || 
+          (github.event_name == 'pull_request' && steps.check_pr.outputs.merged == 'true') ||
+          github.event_name == 'workflow_dispatch'
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.version }}"
+          
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            # 手動指定されたバージョンを使用
+            NEW_VERSION="${{ github.event.inputs.version }}"
+          elif [ -n "${{ github.event.inputs.version_type }}" ]; then
+            # 自動インクリメント
+            VERSION_TYPE="${{ github.event.inputs.version_type }}"
+            NEW_VERSION=$(python3 -c "
+          import sys
+          version = '$CURRENT'
+          parts = version.split('-')
+          base = parts[0]
+          prerelease = '-'.join(parts[1:]) if len(parts) > 1 else None
+          major, minor, patch = map(int, base.split('.'))
+          if '$VERSION_TYPE' == 'major':
+              major += 1
+              minor = 0
+              patch = 0
+          elif '$VERSION_TYPE' == 'minor':
+              minor += 1
+              patch = 0
+          elif '$VERSION_TYPE' == 'patch':
+              patch += 1
+          new_version = f'{major}.{minor}.{patch}'
+          if prerelease:
+              new_version = f'{new_version}-{prerelease}'
+          print(new_version)
+          ")
+          else
+            # デフォルト: パッチバージョンをインクリメント
+            NEW_VERSION=$(python3 -c "
+          version = '$CURRENT'
+          parts = version.split('-')
+          base = parts[0]
+          prerelease = '-'.join(parts[1:]) if len(parts) > 1 else None
+          major, minor, patch = map(int, base.split('.'))
+          patch += 1
+          new_version = f'{major}.{minor}.{patch}'
+          if prerelease:
+              new_version = f'{new_version}-{prerelease}'
+          print(new_version)
+          ")
+          fi
+          
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Check if version already exists
+        if: |
+          github.event_name == 'push' || 
+          (github.event_name == 'pull_request' && steps.check_pr.outputs.merged == 'true') ||
+          github.event_name == 'workflow_dispatch'
+        id: check_version
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Version v$NEW_VERSION already exists. Skipping release."
+            exit 0
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create release branch
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          BRANCH="release/v$NEW_VERSION"
+          git checkout -b "$BRANCH"
+          echo "Created release branch: $BRANCH"
+
+      - name: Update version in pyproject.toml
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          python3 -c "
+          import re
+          with open('pyproject.toml', 'r') as f:
+              content = f.read()
+          content = re.sub(
+              r'^version = [\"\'][^\"\']+[\"\']',
+              f'version = \"$NEW_VERSION\"',
+              content,
+              flags=re.MULTILINE
+          )
+          with open('pyproject.toml', 'w') as f:
+              f.write(content)
+          print(f'Updated version to $NEW_VERSION')
+          "
+
+      - name: Commit version update
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          git add pyproject.toml
+          git commit -m "Bump version to $NEW_VERSION [skip ci]"
+          echo "Committed version update"
+
+      - name: Install build dependencies
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        if: steps.check_version.outputs.exists != 'true'
+        run: python -m build
+
+      - name: Check package
+        if: steps.check_version.outputs.exists != 'true'
+        run: twine check dist/*
+
+      - name: Create tag and push
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          BRANCH="release/v$NEW_VERSION"
+          
+          # タグを作成
+          git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+          
+          # リリースブランチとタグをプッシュ
+          git push origin "$BRANCH"
+          git push origin "v$NEW_VERSION"
+          
+          echo "Pushed release branch and tag"
+
+      - name: Publish to PyPI
+        if: steps.check_version.outputs.exists != 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Create GitHub Release
+        if: steps.check_version.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.new_version.outputs.version }}
+          name: Release ${{ steps.new_version.outputs.version }}
+          body: |
+            ## Version ${{ steps.new_version.outputs.version }}
+            
+            Automated release from main branch.
+            
+            ### Installation
+            ```bash
+            pip install galr==${{ steps.new_version.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge release branch to main
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          BRANCH="release/v$NEW_VERSION"
+          
+          # mainブランチに戻る
+          git checkout main
+          
+          # リリースブランチをマージ
+          git merge "$BRANCH" --no-edit
+          
+          # mainにプッシュ
+          git push origin main
+          
+          # リリースブランチを削除
+          git push origin --delete "$BRANCH" || true
+          
+          echo "Merged release branch to main"
+
+      - name: Summary
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          echo "## ✅ Release Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.new_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Published to PyPI: https://pypi.org/project/galr/${{ steps.new_version.outputs.version }}/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🏷️  Tag: v${{ steps.new_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Skip summary
+        if: steps.check_version.outputs.exists == 'true'
+        run: |
+          echo "## ⚠️ Release Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Version v${{ steps.new_version.outputs.version }} already exists." >> $GITHUB_STEP_SUMMARY
+

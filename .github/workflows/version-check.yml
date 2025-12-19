@@ -1,0 +1,46 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Check version format
+        run: |
+          python -c "
+          import re
+          import sys
+          
+          with open('pyproject.toml', 'r') as f:
+              content = f.read()
+          
+          match = re.search(r'^version = [\"\']([^\"\']+)[\"\']', content, re.MULTILINE)
+          if not match:
+              print('ERROR: Could not find version in pyproject.toml')
+              sys.exit(1)
+          
+          version = match.group(1)
+          
+          # セマンティックバージョニングのチェック
+          if not re.match(r'^\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$', version):
+              print(f'ERROR: Invalid version format: {version}')
+              print('Version must follow Semantic Versioning: MAJOR.MINOR.PATCH[-prerelease]')
+              sys.exit(1)
+          
+          print(f'✓ Version format is valid: {version}')
+          "
+
